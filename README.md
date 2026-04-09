@@ -46,3 +46,4 @@ python scripts/create_agent.py --spec-md ./agent_spec.md --write
 
 Apache-2.0，见 [LICENSE](LICENSE)。
 
+"# copaw-skill-copaw-agent-creator" 
