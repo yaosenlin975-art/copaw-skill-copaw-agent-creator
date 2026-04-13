@@ -573,7 +573,7 @@ def main(argv: Optional[List[str]] = None) -> int:
     plan["steps"]["patch_workspace_skill_json"] = patch_workspace_skill_json(skill_json_path, enabled_skill_entries, write=write)
     
     # Step 4: 使用 find-skills 技能查找更多合适技能
-    additional_skills_result = search_and_import_additional_skills(agent_id, keywords, new_ws, write=write)
+    additional_skills_result = search_and_import_additional_skills(agent_id, kws, new_ws, write=write)
     plan["steps"]["additional_skills_search"] = additional_skills_result
     
     # 如果通过 find-skills 找到了新技能，添加到 skill.json

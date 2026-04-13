@@ -43,6 +43,20 @@ python scripts/create_agent.py --spec-md ./agent_spec.md --write
 - `SKILL.md`: Skill handbook for CoPaw agents (workflow, boundaries, permission prompts)
 - `scripts/create_agent.py`: The main implementation (workspace + registry + skill assembly)
 
+## Docker Environment Adaptation
+
+When running CoPaw inside a Docker container, paths differ from the host:
+
+| Item | Host Path | Docker Container Path |
+|------|-----------|----------------------|
+| Workspaces root | `~/.copaw/workspaces/` | `/app/working/workspaces/` |
+| Skill pool | `~/.copaw/skill_pool/` | `/app/working/skill_pool/` |
+| Config file | `~/.copaw/config.json` | `/app/working/config.json` |
+
+Permissions: Running as root inside the container, no extra permissions needed.  
+Network: Container has external network access for `npx clawhub` online search.  
+Env vars: `HOME` should point to `/root`, `PATH` should include `/app/venv/bin`.
+
 ## License
 
 Apache-2.0. See [LICENSE](LICENSE).

@@ -42,6 +42,20 @@ python scripts/create_agent.py --spec-md ./agent_spec.md --write
 - `SKILL.md`：给 CoPaw agent 使用的技能说明书（流程、边界、如何提问获取写入授权）
 - `scripts/create_agent.py`：核心脚本（创建 workspace + 注册 + 技能装配）
 
+## Docker 环境适配说明
+
+在 Docker 容器中运行 CoPaw 时，路径映射与宿主机不同：
+
+| 项目 | 宿主机路径 | Docker 容器内路径 |
+|------|-----------|-----------------|
+| 工作区根目录 | `~/.copaw/workspaces/` | `/app/working/workspaces/` |
+| 技能池目录 | `~/.copaw/skill_pool/` | `/app/working/skill_pool/` |
+| 主配置文件 | `~/.copaw/config.json` | `/app/working/config.json` |
+
+权限处理：容器内以 root 用户运行，无需额外权限配置。  
+网络访问：容器内可访问外部网络（用于 `npx clawhub` 在线检索）。  
+环境变量：`HOME` 应指向 `/root`，`PATH` 应包含 `/app/venv/bin`。
+
 ## License
 
 Apache-2.0，见 [LICENSE](LICENSE)。
