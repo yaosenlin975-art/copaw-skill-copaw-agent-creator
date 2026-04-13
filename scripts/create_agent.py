@@ -64,23 +64,72 @@ def load_json(path: Path) -> Any:
     return json.loads(path.read_text(encoding="utf-8"))
 
 
+def ensure_rules_activated(registry_path: Path, write: bool) -> Dict[str, Any]:
+    """
+    确保 RULES.md 在 config.json 的 system_prompt_files 中激活。
+    RULES.md 是 Agent 的死规定文件，必须全局生效。
+    """
+    result: Dict[str, Any] = {"rules_in_config": False, "added": False, "skipped": False}
+
+    if not registry_path.exists():
+        result["skipped"] = True
+        return result
+
+    try:
+        obj = load_json(registry_path)
+    except Exception:
+        result["skipped"] = True
+        return result
+
+    defaults = obj.get("defaults", {})
+    spf: List[str] = defaults.get("system_prompt_files", [])
+
+    result["rules_in_config"] = "RULES.md" in spf
+
+    if "RULES.md" not in spf:
+        spf.append("RULES.md")
+        defaults["system_prompt_files"] = spf
+        obj["defaults"] = defaults
+        result["added"] = True
+        if write:
+            safe_write_json(registry_path, obj, write=write)
+    else:
+        result["skipped"] = True
+
+    return result
+
+
 def ensure_workspace_template(default_ws: Path, new_ws: Path, write: bool) -> Dict[str, Any]:
     """
-    优先从 default workspace 复制模板；若不存在则创建最小集。
+    模板优先级：
+    1. default workspace（用户自定义模板）
+    2. repo 内置 template/ 目录（技能包自带模板）
+    3. 硬编码最小文件集
     """
-    actions: Dict[str, Any] = {"copy_from_default": False, "created_minimal": False, "files": []}
+    actions: Dict[str, Any] = {"copy_from_default": False, "from_template": False, "created_minimal": False, "files": []}
 
+    # 1. 优先复制 default workspace
     if default_ws.exists() and default_ws.is_dir():
         actions["copy_from_default"] = True
         if write:
             shutil.copytree(default_ws, new_ws, dirs_exist_ok=False)
-        # 记录关键文件
         actions["files"] = [p.name for p in default_ws.iterdir()]
         return actions
 
+    # 2. 尝试从 repo template/ 目录复制
+    script_dir = Path(__file__).parent.resolve()
+    repo_root = script_dir.parent
+    template_dir = repo_root / "template"
+    if template_dir.exists() and template_dir.is_dir():
+        actions["from_template"] = True
+        if write:
+            shutil.copytree(template_dir, new_ws, dirs_exist_ok=False)
+        actions["files"] = [p.name for p in template_dir.iterdir()]
+        return actions
+
+    # 3. 硬编码最小文件集
     actions["created_minimal"] = True
     safe_mkdir(new_ws, write=write)
-    # 最小文件集（不追求完整，只保证可读可用）
     md_defaults = {
         "AGENTS.md": "# AGENTS\n\n这里写该智能体的工作规范与边界。\n",
         "MEMORY.md": "# MEMORY\n\n这里写长期记忆与经验教训（避免敏感信息）。\n",
@@ -88,11 +137,11 @@ def ensure_workspace_template(default_ws: Path, new_ws: Path, write: bool) -> Di
         "SOUL.md": "# SOUL\n\n这里写人格、风格与原则。\n",
         "HEARTBEAT.md": "# Heartbeat checklist\n- （按需填写）\n",
         "BOOTSTRAP.md": "# BOOTSTRAP\n\n新会话启动时的引导。\n",
+        "RULES.md": "# RULES.md\n\n## Agent 死规定\n\n1. 所有死规定统一写入 RULES.md\n2. 死规定冲突时必须协商\n3. 修改带格式文件必须 temp 校验 + 备份\n4. 需求确认后再执行\n",
     }
     if write:
         for fn, content in md_defaults.items():
             (new_ws / fn).write_text(content, encoding="utf-8")
-        # minimal manifests (使用正确的 JSON 格式)
         (new_ws / "chats.json").write_text('{\n  "chats": [],\n  "version": 1\n}\n', encoding="utf-8")
         (new_ws / "jobs.json").write_text("{}\n", encoding="utf-8")
     actions["files"] = sorted(md_defaults.keys())
@@ -592,7 +641,11 @@ def main(argv: Optional[List[str]] = None) -> int:
     
     # Step 5: 为智能体设置模型配置（已在 patch_agent_json 中完成）
     # 模型配置已添加到 agent.json 中
-    
+
+    # Step 5b: 确保 RULES.md 在全局 system_prompt_files 中激活
+    rules_activation_result = ensure_rules_activated(registry_path, write=write)
+    plan["steps"]["rules_activation"] = rules_activation_result
+
     # Step 6: 添加多智能体协作技能
     multi_agent_result = add_multi_agent_collaboration_skill(new_ws, skill_pool_dir, write=write)
     plan["steps"]["multi_agent_skill"] = multi_agent_result

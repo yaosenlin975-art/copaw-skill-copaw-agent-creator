@@ -1,7 +1,7 @@
 ---
 name: agent_creator
 description: "创建新的 CoPaw 智能体（workspace）并注册到前端可见列表；按需求自动装配技能：先查本地 skill_pool，再用 clawhub 在线检索，若仍无则生成新技能。所有写入必须先征得用户同意并做 JSON 校验与同目录备份。"
-metadata: { "copaw": { "emoji": "🧩" }, "skill_version": "0.2.1" }
+metadata: { "copaw": { "emoji": "🧩" }, "skill_version": "0.2.2" }
 ---
 
 # 创建 CoPaw 智能体（含技能自动装配）
@@ -91,6 +91,13 @@ metadata: { "copaw": { "emoji": "🧩" }, "skill_version": "0.2.1" }
 - 设置 `provider_id: "minimax-custom"`
 - 设置 `model: "MiniMax-M2.7"`（默认模型）
 
+### Step 5b：激活 RULES.md
+
+确保 `RULES.md`（Agent 死规定）在全局 `system_prompt_files` 中激活：
+- 读取 `config.json` 的 `defaults.system_prompt_files`
+- 若 `RULES.md` 不在列表中，自动追加
+- RULES.md 是不可违背的死规定文件，必须全局生效
+
 ### Step 6：添加多智能体协作技能
 
 为智能体添加多智能体协作技能，确保智能体可以与其他智能体通信：
@@ -113,6 +120,26 @@ metadata: { "copaw": { "emoji": "🧩" }, "skill_version": "0.2.1" }
 - 如果你的版本存在独立 `agents.json`，脚本会优先使用它；否则回退到 `config.json`
 
 ## 使用方式（建议）
+
+### 模板机制
+
+创建新 workspace 时，模板优先级如下：
+1. **`default` workspace**（用户自定义模板，位于 workspaces/default）
+2. **repo 内置 `template/` 目录**（技能包自带模板，包含 RULES.md）
+3. **硬编码最小文件集**
+
+推荐维护 `template/` 目录来标准化所有新智能体的基础配置。
+模板目录结构：
+```
+template/
+├── AGENTS.md       ← 职责与边界定义
+├── SOUL.md         ← 人格与风格
+├── PROFILE.md      ← 身份档案
+├── MEMORY.md       ← 长期记忆
+├── RULES.md        ← 死规定（关键！）
+├── HEARTBEAT.md    ← 心跳配置
+└── BOOTSTRAP.md    ← 启动引导
+```
 
 ### 1) 先 dry-run（只读）
 

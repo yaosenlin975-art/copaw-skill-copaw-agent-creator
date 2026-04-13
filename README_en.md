@@ -42,6 +42,19 @@ python scripts/create_agent.py --spec-md ./agent_spec.md --write
 
 - `SKILL.md`: Skill handbook for CoPaw agents (workflow, boundaries, permission prompts)
 - `scripts/create_agent.py`: The main implementation (workspace + registry + skill assembly)
+- `template/`: Built-in agent template (includes AGENTS.md, SOUL.md, RULES.md and more)
+
+## Template Mechanism
+
+When creating a new workspace, template priority:
+1. `default` workspace (user-defined template)
+2. `template/` directory (built-in template, new in v0.2.2)
+3. Hardcoded minimal file set
+
+**Built-in template features:**
+- Complete set: AGENTS.md / SOUL.md / PROFILE.md / MEMORY.md / RULES.md / HEARTBEAT.md / BOOTSTRAP.md
+- `RULES.md` (Agent dead rules) is auto-registered to global `system_prompt_files` → active immediately after creation
+- No need to maintain a default workspace to get a standardized template
 
 ## Docker Environment Adaptation
 
