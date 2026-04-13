@@ -1,7 +1,7 @@
 ---
-name: copaw_agent_creator
+name: agent_creator
 description: "创建新的 CoPaw 智能体（workspace）并注册到前端可见列表；按需求自动装配技能：先查本地 skill_pool，再用 clawhub 在线检索，若仍无则生成新技能。所有写入必须先征得用户同意并做 JSON 校验与同目录备份。"
-metadata: { "copaw": { "emoji": "🧩" }, "skill_version": "0.1.0" }
+metadata: { "copaw": { "emoji": "🧩" }, "skill_version": "0.2.1" }
 ---
 
 # 创建 CoPaw 智能体（含技能自动装配）
@@ -13,6 +13,25 @@ metadata: { "copaw": { "emoji": "🧩" }, "skill_version": "0.1.0" }
 - “帮我创建一个负责 X 的新智能体”
 - “我想要一个专门写报告/做数据分析/运营增长的 agent”
 - “创建 agent 并确保在 CoPaw 前端能看到（注册到列表）”
+
+## Docker 环境适配说明
+
+### 路径映射
+- **工作区路径**：在 Docker 环境中，智能体工作区通常位于 `/app/working/workspaces/<agent_id>/`
+- **技能池路径**：技能池位于 `/app/working/skill_pool/`
+- **配置文件**：主配置文件位于 `/app/working/config.json`
+
+### 权限处理
+- Docker 容器内以 root 用户运行，无需额外权限配置
+- 文件操作使用容器内路径，避免宿主机路径混淆
+
+### 网络访问
+- Docker 容器内可访问外部网络（用于在线技能检索）
+- 确保容器有 DNS 解析能力（用于 npx clawhub 命令）
+
+### 环境变量
+- `HOME` 环境变量应指向 `/root`
+- `PATH` 应包含 `/app/venv/bin` 以使用 copaw 命令
 
 ## 你必须遵守的写入协议（硬规则）
 
@@ -57,6 +76,35 @@ metadata: { "copaw": { "emoji": "🧩" }, "skill_version": "0.1.0" }
 - 仅包含必要的 `SKILL.md`（保持简洁，避免冗长）
 - 如需确定性执行，可生成 `scripts/` 中的脚本骨架
 
+### Step 4：使用 find-skills 技能查找更多合适技能
+
+调用 find-skills 技能为新的智能体查找合适职能的技能并添加进新的智能体的技能表里：
+- 使用 `npx clawhub search "<keyword>"` 搜索相关技能
+- 评估技能匹配度，选择最合适的 2-3 个技能
+- 下载并导入到智能体工作区的 skills 目录
+- 在 skill.json 中启用这些技能
+
+### Step 5：为智能体设置模型配置
+
+创建智能体后，为其设置默认的模型配置（与 default agent 一致）：
+- 在 `agent.json` 中添加 `active_model` 字段
+- 设置 `provider_id: "minimax-custom"`
+- 设置 `model: "MiniMax-M2.7"`（默认模型）
+
+### Step 6：添加多智能体协作技能
+
+为智能体添加多智能体协作技能，确保智能体可以与其他智能体通信：
+- 检查是否已存在 multi_agent_collaboration 技能
+- 如不存在，从技能池或在线搜索并导入
+- 在 skill.json 中启用该技能
+
+### Step 7：测试智能体通信（收尾操作）
+
+使用多智能体协作技能尝试与新建的智能体沟通，以保证智能体创建正常：
+- 从当前智能体向新建智能体发送测试消息
+- 验证智能体可以正常接收和响应消息
+- 记录测试结果，确保智能体功能正常
+
 ## CoPaw 的“智能体列表注册”位置
 
 不同版本可能不同：
@@ -80,6 +128,16 @@ python scripts/create_agent.py --spec-md ./agent_spec.md --dry-run
 ```bash
 python scripts/create_agent.py --spec-md ./agent_spec.md --write
 ```
+
+### 3) 完整流程（推荐）
+
+1. **dry-run**：运行 `--dry-run` 查看计划
+2. **用户确认**：询问用户是否同意
+3. **写入**：运行 `--write` 执行创建
+4. **技能查找**：自动调用 find-skills 查找更多技能
+5. **模型配置**：自动设置模型配置
+6. **协作技能**：添加多智能体协作技能
+7. **测试通信**：发送测试消息验证智能体功能
 
 ## agent_spec.md 示例
 

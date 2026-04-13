@@ -92,14 +92,17 @@ def ensure_workspace_template(default_ws: Path, new_ws: Path, write: bool) -> Di
     if write:
         for fn, content in md_defaults.items():
             (new_ws / fn).write_text(content, encoding="utf-8")
-        # minimal manifests
-        (new_ws / "chats.json").write_text("[]\n", encoding="utf-8")
-        (new_ws / "jobs.json").write_text("[]\n", encoding="utf-8")
+        # minimal manifests (使用正确的 JSON 格式)
+        (new_ws / "chats.json").write_text('{\n  "chats": [],\n  "version": 1\n}\n', encoding="utf-8")
+        (new_ws / "jobs.json").write_text("{}\n", encoding="utf-8")
     actions["files"] = sorted(md_defaults.keys())
     return actions
 
 
-def patch_agent_json(agent_json_path: Path, agent_id: str, name: str, description: str, ws_dir: Path, write: bool) -> Dict[str, Any]:
+def patch_agent_json(agent_json_path: Path, agent_id: str, name: str, description: str, ws_dir: Path, write: bool, model: str = "MiniMax-M2.7") -> Dict[str, Any]:
+    """
+    更新 agent.json 文件，包含正确的模型配置
+    """
     if agent_json_path.exists():
         obj = load_json(agent_json_path)
     else:
@@ -110,6 +113,13 @@ def patch_agent_json(agent_json_path: Path, agent_id: str, name: str, descriptio
     obj["name"] = name
     obj["description"] = description
     obj["workspace_dir"] = str(ws_dir)
+    
+    # 添加正确的模型配置（与 default agent 一致）
+    obj["active_model"] = {
+        "provider_id": "minimax-custom",
+        "model": model
+    }
+    
     return safe_write_json(agent_json_path, obj, write=write)
 
 
@@ -147,6 +157,147 @@ def patch_workspace_skill_json(skill_json_path: Path, enabled_skills: List[Dict[
 
     obj["version"] = int(__import__("time").time() * 1000)
     return safe_write_json(skill_json_path, obj, write=write)
+
+
+def search_and_import_additional_skills(agent_id: str, keywords: List[str], ws_dir: Path, write: bool) -> Dict[str, Any]:
+    """
+    使用 find-skills 技能为新的智能体查找更多合适职能的技能
+    """
+    import subprocess
+    
+    result = {
+        "searched_keywords": keywords,
+        "imported_skills": [],
+        "failed_searches": []
+    }
+    
+    if not write:
+        return result
+    
+    skills_dir = ws_dir / "skills"
+    safe_mkdir(skills_dir, write=write)
+    
+    # 使用 clawhub 搜索更多技能
+    for keyword in keywords[:3]:  # 限制搜索前3个关键词
+        try:
+            # 使用 npx clawhub search 搜索技能
+            cmd = ["npx", "clawhub", "search", keyword, "--limit", "2"]
+            proc = subprocess.run(cmd, capture_output=True, text=True, timeout=30)
+            
+            if proc.returncode == 0 and proc.stdout.strip():
+                # 解析输出，尝试安装找到的技能
+                lines = proc.stdout.strip().split("\n")
+                for line in lines[:2]:  # 每个关键词最多安装2个技能
+                    if "/" in line:
+                        # 提取技能 slug
+                        parts = line.strip().split()
+                        if parts:
+                            slug = parts[0].split("/")[-1] if "/" in parts[0] else parts[0]
+                            try:
+                                # 下载并安装技能
+                                download_cmd = ["npx", "clawhub", "install", slug, "--dir", str(skills_dir)]
+                                dl_proc = subprocess.run(download_cmd, capture_output=True, text=True, timeout=60)
+                                if dl_proc.returncode == 0:
+                                    result["imported_skills"].append(slug)
+                            except Exception:
+                                continue
+        except Exception as e:
+            result["failed_searches"].append({"keyword": keyword, "error": str(e)})
+            continue
+    
+    return result
+
+
+def add_multi_agent_collaboration_skill(ws_dir: Path, skill_pool_dir: Path, write: bool) -> Dict[str, Any]:
+    """
+    添加多智能体协作技能到智能体工作区
+    """
+    import shutil
+    
+    result = {
+        "skill_added": False,
+        "source": None,
+        "skill_name": "multi_agent_collaboration"
+    }
+    
+    if not write:
+        return result
+    
+    skills_dir = ws_dir / "skills"
+    safe_mkdir(skills_dir, write=write)
+    
+    # 检查是否已存在
+    target_skill_dir = skills_dir / "multi_agent_collaboration"
+    if target_skill_dir.exists():
+        result["skill_added"] = True
+        result["source"] = "already_exists"
+        return result
+    
+    # 首先检查本地技能池
+    local_skill_paths = [
+        skill_pool_dir / "multi_agent_collaboration",
+        Path("/app/working/skill_pool/multi_agent_collaboration"),
+        Path("/app/working/workspaces/default/skills/multi_agent_collaboration")
+    ]
+    
+    for local_path in local_skill_paths:
+        if local_path.exists() and (local_path / "SKILL.md").exists():
+            try:
+                shutil.copytree(local_path, target_skill_dir)
+                result["skill_added"] = True
+                result["source"] = str(local_path)
+                return result
+            except Exception:
+                continue
+    
+    # 如果本地没有，尝试从 clawhub 下载
+    try:
+        import subprocess
+        cmd = ["npx", "clawhub", "install", "multi_agent_collaboration", "--dir", str(skills_dir)]
+        proc = subprocess.run(cmd, capture_output=True, text=True, timeout=60)
+        if proc.returncode == 0:
+            result["skill_added"] = True
+            result["source"] = "clawhub"
+    except Exception:
+        pass
+    
+    return result
+
+
+def test_agent_communication(agent_id: str, write: bool) -> Dict[str, Any]:
+    """
+    测试与新建智能体的通信，确保智能体创建正常
+    """
+    import subprocess
+    
+    result = {
+        "test_sent": False,
+        "response_received": False,
+        "test_message": f"Hello {agent_id}, this is a test message to verify your setup.",
+        "response": None
+    }
+    
+    if not write:
+        return result
+    
+    try:
+        # 使用 copaw agents chat 命令发送测试消息
+        cmd = ["copaw", "agents", "chat", agent_id, "--message", result["test_message"], "--timeout", "30"]
+        proc = subprocess.run(cmd, capture_output=True, text=True, timeout=60)
+        
+        result["test_sent"] = True
+        
+        if proc.returncode == 0:
+            result["response_received"] = True
+            result["response"] = proc.stdout.strip()[:500]  # 限制响应长度
+        else:
+            result["response"] = f"Command failed: {proc.stderr[:200] if proc.stderr else 'Unknown error'}"
+    except subprocess.TimeoutExpired:
+        result["response"] = "Test timed out"
+    except Exception as e:
+        result["response"] = f"Test failed: {str(e)}"
+    
+    return result
 
 
 def update_registry(registry_path: Path, agent_id: str, ws_dir: Path, write: bool, set_active: bool) -> Dict[str, Any]:
@@ -420,6 +571,48 @@ def main(argv: Optional[List[str]] = None) -> int:
         plan["steps"]["generated_skill"] = generated_skill
 
     plan["steps"]["patch_workspace_skill_json"] = patch_workspace_skill_json(skill_json_path, enabled_skill_entries, write=write)
+    
+    # Step 4: 使用 find-skills 技能查找更多合适技能
+    additional_skills_result = search_and_import_additional_skills(agent_id, keywords, new_ws, write=write)
+    plan["steps"]["additional_skills_search"] = additional_skills_result
+    
+    # 如果通过 find-skills 找到了新技能，添加到 skill.json
+    if write and additional_skills_result.get("imported_skills"):
+        for skill_name in additional_skills_result["imported_skills"]:
+            enabled_skill_entries.append({
+                "name": skill_name,
+                "description": f"imported via find-skills for {agent_id}",
+                "source": "clawhub",
+                "metadata": {"name": skill_name, "description": f"imported via find-skills", "source": "clawhub"},
+                "requirements": {"require_bins": [], "require_envs": []},
+                "updated_at": "",
+            })
+        # 重新更新 skill.json
+        patch_workspace_skill_json(skill_json_path, enabled_skill_entries, write=write)
+    
+    # Step 5: 为智能体设置模型配置（已在 patch_agent_json 中完成）
+    # 模型配置已添加到 agent.json 中
+    
+    # Step 6: 添加多智能体协作技能
+    multi_agent_result = add_multi_agent_collaboration_skill(new_ws, skill_pool_dir, write=write)
+    plan["steps"]["multi_agent_skill"] = multi_agent_result
+    
+    # 如果成功添加了多智能体协作技能，更新 skill.json
+    if write and multi_agent_result.get("skill_added"):
+        enabled_skill_entries.append({
+            "name": "multi_agent_collaboration",
+            "description": "Multi-agent collaboration skill for CoPaw",
+            "source": "builtin",
+            "metadata": {"name": "multi_agent_collaboration", "description": "Multi-agent collaboration skill", "source": "builtin"},
+            "requirements": {"require_bins": [], "require_envs": []},
+            "updated_at": "",
+        })
+        patch_workspace_skill_json(skill_json_path, enabled_skill_entries, write=write)
+    
+    # Step 7: 测试智能体通信（收尾操作）
+    test_result = test_agent_communication(agent_id, write=write)
+    plan["steps"]["communication_test"] = test_result
+    
     plan["steps"]["update_registry"] = update_registry(registry_path, agent_id, new_ws, write=write, set_active=bool(args.set_active))
 
     print(json.dumps(plan, ensure_ascii=False, indent=2))
