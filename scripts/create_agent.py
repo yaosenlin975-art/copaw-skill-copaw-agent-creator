@@ -150,7 +150,7 @@ def ensure_workspace_template(default_ws: Path, new_ws: Path, write: bool) -> Di
 
 def patch_agent_json(agent_json_path: Path, agent_id: str, name: str, description: str, ws_dir: Path, write: bool, model: str = "MiniMax-M2.7") -> Dict[str, Any]:
     """
-    更新 agent.json 文件，包含正确的模型配置
+    更新 agent.json 文件，包含正确的模型配置和渠道过滤设置
     """
     if agent_json_path.exists():
         obj = load_json(agent_json_path)
@@ -168,6 +168,22 @@ def patch_agent_json(agent_json_path: Path, agent_id: str, name: str, descriptio
         "provider_id": "minimax-custom",
         "model": model
     }
+    
+    # 设置渠道过滤配置：微信和企业微信渠道过滤工具使用和思考流程
+    if "channels" not in obj:
+        obj["channels"] = {}
+    
+    # 微信渠道过滤配置
+    if "weixin" not in obj["channels"]:
+        obj["channels"]["weixin"] = {}
+    obj["channels"]["weixin"]["filter_tool_messages"] = True
+    obj["channels"]["weixin"]["filter_thinking"] = True
+    
+    # 企业微信渠道过滤配置
+    if "wecom" not in obj["channels"]:
+        obj["channels"]["wecom"] = {}
+    obj["channels"]["wecom"]["filter_tool_messages"] = True
+    obj["channels"]["wecom"]["filter_thinking"] = True
     
     return safe_write_json(agent_json_path, obj, write=write)
 
