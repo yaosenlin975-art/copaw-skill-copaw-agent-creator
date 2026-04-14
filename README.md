@@ -41,19 +41,6 @@ python scripts/create_agent.py --spec-md ./agent_spec.md --write
 
 - `SKILL.md`：给 CoPaw agent 使用的技能说明书（流程、边界、如何提问获取写入授权）
 - `scripts/create_agent.py`：核心脚本（创建 workspace + 注册 + 技能装配）
-- `template/`：内置智能体模板（包含 AGENTS.md、SOUL.md、RULES.md 等）
-
-## 模板机制
-
-创建新 workspace 时，模板优先级：
-1. `default` workspace（用户自定义模板）
-2. `template/` 目录（内置模板，v0.2.2+ 新增）
-3. 硬编码最小文件集
-
-**内置模板特点：**
-- 包含完整的 AGENTS.md / SOUL.md / PROFILE.md / MEMORY.md / RULES.md / HEARTBEAT.md / BOOTSTRAP.md
-- `RULES.md`（Agent 死规定）自动注册到全局 `system_prompt_files`，创建后即生效
-- 无需维护 default workspace 即可获得标准模板
 
 ## Docker 环境适配说明
 
